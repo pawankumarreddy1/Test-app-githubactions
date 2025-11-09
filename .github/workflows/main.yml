@@ -1,0 +1,80 @@
+name: 🚀 Deploy to Cloud Run (Production)
+
+on:
+  push:
+    branches:
+      - main   # Deploy only when main branch is updated
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  REGION: ${{ secrets.REGION }}
+  SERVICE_NAME: hostel-backend-prod     # Cloud Run service name
+  REPO_NAME: hostelbe             # Artifact Registry repository name
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # -----------------------
+      # 1️⃣  Checkout Repository
+      # -----------------------
+      - name: 🧾 Checkout code
+        uses: actions/checkout@v4
+
+      # -----------------------
+      # 2️⃣  Set Up Google Cloud SDK
+      # -----------------------
+      - name: 🔧 Set up Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+          export_default_credentials: true
+
+      # -----------------------
+      # 3️⃣  Authenticate Docker to Artifact Registry
+      # -----------------------
+      - name: 🔐 Authenticate Docker to Artifact Registry
+        run: |
+          echo "Authenticating Docker with Artifact Registry..."
+          echo '${{ secrets.GCP_SA_KEY }}' > key.json
+          gcloud auth activate-service-account --key-file=key.json
+          gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      # -----------------------
+      # 4️⃣  Diagnostic Step (optional but helpful)
+      # -----------------------
+      - name: 🔍 Verify Authentication & Repository Access
+        run: |
+          echo "Listing authenticated accounts..."
+          gcloud auth list
+          echo "Checking Artifact Registry access..."
+          gcloud artifacts repositories list --project ${{ env.PROJECT_ID }} --location=${{ env.REGION }}
+
+      # -----------------------
+      # 5️⃣  Build and Push Docker Image
+      # -----------------------
+      - name: 🐳 Build and Push Docker Image
+        run: |
+          IMAGE="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/${{ env.SERVICE_NAME }}:${{ github.sha }}"
+          echo "Building image: $IMAGE"
+          docker build -t $IMAGE .
+          echo "Pushing image to Artifact Registry..."
+          docker push $IMAGE
+
+      # -----------------------
+      # 6️⃣  Deploy to Cloud Run
+      # -----------------------
+      - name: 🚀 Deploy to Cloud Run
+        run: |
+          IMAGE="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/${{ env.SERVICE_NAME }}:${{ github.sha }}"
+          echo "Deploying image: $IMAGE"
+          gcloud run deploy ${{ env.SERVICE_NAME }} \
+            --image $IMAGE \
+            --region ${{ env.REGION }} \
+            --platform managed \
+            --allow-unauthenticated \
+            --port 8080
+
+

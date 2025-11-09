@@ -1,0 +1,40 @@
+[project]
+name = "hostelapp-backend"
+version = "0.1.0"
+description = ""
+authors = [
+    { name = "dinesh-prajwal", email = "dineshveerapareddy@prajwalfintech.com" }
+]
+readme = "README.md"
+requires-python = ">=3.13,<4"
+dependencies = [
+    "django (>=5.2.6,<6.0.0)",
+    "djangorestframework (>=3.16.1,<4.0.0)",
+    "ruff (>=0.13.1,<0.14.0)",
+    "django-filter (>=25.1,<26.0)",
+    "drf-yasg (>=1.21.10,<2.0.0)",
+    "django-cors-headers (>=4.9.0,<5.0.0)",
+    "psycopg2-binary (>=2.9.10,<3.0.0)",
+    "django-environ (>=0.12.0,<1.0.0)",
+    "pytest-django (>=4.11.1,<5.0.0)",
+    "uvicorn (>=0.37.0,<0.38.0)",
+    "boto3 (>=1.40.41,<2.0.0)",
+    "pillow (>=11.3.0,<12.0.0)",
+    "django-storages (>=1.14.6,<2.0.0)",
+    "dj-database-url (>=3.0.1,<4.0.0)",
+    "gunicorn (>=22.0.0,<23.0.0)",
+    "django-redis (>=6.0.0,<7.0.0)",
+    "cloudinary (>=1.44.1,<2.0.0)"
+]
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[dependency-groups]
+dev = [
+    "pre-commit (>=4.3.0,<5.0.0)",
+    "pytest (>=8.4.2,<9.0.0)",
+    "pytest-django (>=4.11.1,<5.0.0)",
+    "pytest-cov (>=7.0.0,<8.0.0)"
+]

@@ -1,0 +1,60 @@
+name: 🚀 Deploy to Cloud Run (Hostelbe Testing)
+
+on:
+  push:
+    branches:
+      - dev    # 👈 Change branch to 'dev' if you want separate test branch
+               # or keep 'main' if you want same branch
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  REGION: ${{ secrets.REGION }}
+  SERVICE_NAME: hostelbe                # 👈 New Cloud Run service name
+  REPO_NAME: hostelbe                   # 👈 You can keep same repo or new one
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 🧾 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔧 Set up Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+          export_default_credentials: true
+
+      - name: 🔐 Authenticate Docker to Artifact Registry
+        run: |
+          echo "Authenticating Docker with Artifact Registry..."
+          echo '${{ secrets.GCP_SA_KEY }}' > key.json
+          gcloud auth activate-service-account --key-file=key.json
+          gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      - name: 🔍 Verify Authentication & Repository Access
+        run: |
+          gcloud auth list
+          gcloud artifacts repositories list \
+            --project ${{ env.PROJECT_ID }} \
+            --location=${{ env.REGION }}
+
+      - name: 🐳 Build and Push Docker Image
+        run: |
+          IMAGE="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/${{ env.SERVICE_NAME }}:${{ github.sha }}"
+          echo "Building image: $IMAGE"
+          docker build -t $IMAGE .
+          docker push $IMAGE
+
+      - name: 🚀 Deploy to Cloud Run
+        run: |
+          IMAGE="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/${{ env.SERVICE_NAME }}:${{ github.sha }}"
+          echo "Deploying image: $IMAGE"
+          gcloud run deploy ${{ env.SERVICE_NAME }} \
+            --image $IMAGE \
+            --region ${{ env.REGION }} \
+            --platform managed \
+            --allow-unauthenticated \
+            --port 8080

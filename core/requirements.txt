@@ -1,0 +1,11 @@
+django
+psycopg[binary]
+djangorestframework
+django-filter
+drf-yasg
+django-cors-headers
+dj-database-url
+python-dotenv
+Pillow
+django-environ
+cloudinary
