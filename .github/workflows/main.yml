@@ -3,28 +3,64 @@ name: 🚀 Deploy to Cloud Run (Production)
 on:
   push:
     branches:
-      - main   # Deploy only when main branch is updated
+      - main
 
 env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
   REGION: ${{ secrets.REGION }}
-  SERVICE_NAME: hostel-backend-prod     # Cloud Run service name
-  REPO_NAME: hostelbe             # Artifact Registry repository name
+  SERVICE_NAME: hostel-backend-prod
+  REPO_NAME: hostelbe
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-      # -----------------------
-      # 1️⃣  Checkout Repository
-      # -----------------------
+      # 1️⃣ Checkout code
       - name: 🧾 Checkout code
         uses: actions/checkout@v4
 
-      # -----------------------
-      # 2️⃣  Set Up Google Cloud SDK
-      # -----------------------
+      # 2️⃣ Generate Version (v1.0.x auto increase)
+      - name: 🏷 Generate Semantic Version
+        id: version
+        run: |
+          VERSION_FILE=version.txt
+
+          # If version file exists, read version; else start with v1.0.0
+          if [ -f $VERSION_FILE ]; then
+            VERSION=$(cat $VERSION_FILE)
+          else
+            VERSION="v1.0.0"
+          fi
+
+          echo "Current version: $VERSION"
+
+          # Extract version numbers x.y.z
+          IFS='.' read -r major minor patch <<< "${VERSION//v/}"
+
+          # Increase PATCH version
+          patch=$((patch + 1))
+
+          NEW_VERSION="v$major.$minor.$patch"
+
+          echo "New version: $NEW_VERSION"
+
+          # Save new version to file
+          echo $NEW_VERSION > $VERSION_FILE
+
+          # Output version for next steps
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+
+      # Commit updated version.txt
+      - name: 🔄 Commit Version File
+        run: |
+          git config --global user.email "github-actions@github.com"
+          git config --global user.name "GitHub Actions"
+          git add version.txt
+          git commit -m "🔖 Bump version to ${{ steps.version.outputs.version }}"
+          git push
+
+      # 3️⃣ Setup gcloud
       - name: 🔧 Set up Google Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
         with:
@@ -32,49 +68,35 @@ jobs:
           service_account_key: ${{ secrets.GCP_SA_KEY }}
           export_default_credentials: true
 
-      # -----------------------
-      # 3️⃣  Authenticate Docker to Artifact Registry
-      # -----------------------
-      - name: 🔐 Authenticate Docker to Artifact Registry
+      # 4️⃣ Authenticate Docker
+      - name: 🔐 Authenticate Docker
         run: |
-          echo "Authenticating Docker with Artifact Registry..."
           echo '${{ secrets.GCP_SA_KEY }}' > key.json
           gcloud auth activate-service-account --key-file=key.json
           gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
 
-      # -----------------------
-      # 4️⃣  Diagnostic Step (optional but helpful)
-      # -----------------------
-      - name: 🔍 Verify Authentication & Repository Access
+      # 5️⃣ Build & Push Docker Image With Version Tag
+      - name: 🐳 Build & Push Image
         run: |
-          echo "Listing authenticated accounts..."
-          gcloud auth list
-          echo "Checking Artifact Registry access..."
-          gcloud artifacts repositories list --project ${{ env.PROJECT_ID }} --location=${{ env.REGION }}
-
-      # -----------------------
-      # 5️⃣  Build and Push Docker Image
-      # -----------------------
-      - name: 🐳 Build and Push Docker Image
-        run: |
-          IMAGE="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/${{ env.SERVICE_NAME }}:${{ github.sha }}"
-          echo "Building image: $IMAGE"
+          VERSION=${{ steps.version.outputs.version }}
+          IMAGE="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/${{ env.SERVICE_NAME }}:$VERSION"
+          echo "Building: $IMAGE"
           docker build -t $IMAGE .
-          echo "Pushing image to Artifact Registry..."
           docker push $IMAGE
 
-      # -----------------------
-      # 6️⃣  Deploy to Cloud Run
-      # -----------------------
+      # 6️⃣ Deploy to Cloud Run
       - name: 🚀 Deploy to Cloud Run
         run: |
-          IMAGE="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/${{ env.SERVICE_NAME }}:${{ github.sha }}"
-          echo "Deploying image: $IMAGE"
+          VERSION=${{ steps.version.outputs.version }}
+          IMAGE="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO_NAME }}/${{ env.SERVICE_NAME }}:$VERSION"
+          echo "Deploying: $IMAGE"
           gcloud run deploy ${{ env.SERVICE_NAME }} \
             --image $IMAGE \
             --region ${{ env.REGION }} \
             --platform managed \
             --allow-unauthenticated \
             --port 8080
+
+
 
 
