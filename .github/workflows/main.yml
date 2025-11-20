@@ -8,7 +8,7 @@ on:
 env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
   REGION: ${{ secrets.REGION }}
-  SERVICE_NAME: hostel-backend-prod
+  SERVICE_NAME: pavan-app
   REPO_NAME: hostelbe
 
 jobs:
