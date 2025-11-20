@@ -1,57 +1,57 @@
+# --------------------------
+# 1️⃣ Base Image
+# --------------------------
+FROM python:3.11-slim
 
 # --------------------------
-# 1️⃣ Base Python Image
+# 2️⃣ Environment Vars
 # --------------------------
-FROM python:3.12-slim
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    POETRY_VERSION=1.8.3 \
+    PATH="/root/.local/bin:$PATH"
 
 # --------------------------
-# 2️⃣ Set Work Directory
+# 3️⃣ System Dependencies
+# --------------------------
+RUN apt-get update && apt-get install -y \
+    curl \
+    build-essential \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# --------------------------
+# 4️⃣ Install Poetry
+# --------------------------
+RUN curl -sSL https://install.python-poetry.org | python3 -
+
+# --------------------------
+# 5️⃣ Set Work Directory
 # --------------------------
 WORKDIR /app
 
 # --------------------------
-# 3️⃣ Install System Dependencies
+# 6️⃣ Copy Project Files
 # --------------------------
-# psycopg2 + poetry dependencies
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    libpq-dev \
-    curl \
-    && apt-get clean
+COPY pyproject.toml poetry.lock* ./
 
 # --------------------------
-# 4️⃣ Install Poetry Properly
-# --------------------------
-ENV POETRY_VERSION=1.8.3
-RUN curl -sSL https://install.python-poetry.org | python3 -
-
-# Add Poetry to PATH
-ENV PATH="/root/.local/bin:$PATH"
-
-# Disable Poetry virtualenv (we use system python)
-RUN poetry config virtualenvs.create false
-
-# --------------------------
-# 5️⃣ Copy Project Files
-# --------------------------
-COPY pyproject.toml poetry.lock* /app/
-
-# --------------------------
-# 6️⃣ Install Python Dependencies
+# 7️⃣ Install Python Dependencies
 # --------------------------
 RUN poetry install --no-interaction --no-ansi
 
 # --------------------------
-# 7️⃣ Copy Whole Project
+# 8️⃣ Copy Remaining Files
 # --------------------------
-COPY . /app
+COPY . .
 
 # --------------------------
-# 8️⃣ Expose Port
+# 9️⃣ Expose Port
 # --------------------------
 EXPOSE 8000
 
 # --------------------------
-# 9️⃣ Default Command
+# 🔟 Start Django
 # --------------------------
 CMD ["poetry", "run", "python", "-m", "core.manage", "runserver", "0.0.0.0:8000"]
+
