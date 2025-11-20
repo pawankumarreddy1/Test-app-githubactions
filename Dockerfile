@@ -1,57 +1,34 @@
-# --------------------------
-# 1️⃣ Base Image
-# --------------------------
-FROM python:3.11-slim
+FROM python:3.13-slim-bookworm
 
-# --------------------------
-# 2️⃣ Environment Vars
-# --------------------------
 ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
-    POETRY_VERSION=1.8.3 \
-    PATH="/root/.local/bin:$PATH"
+    PYTHONDONTWRITEBYTECODE=1
 
-# --------------------------
-# 3️⃣ System Dependencies
-# --------------------------
-RUN apt-get update && apt-get install -y \
-    curl \
-    build-essential \
-    libpq-dev \
-    && rm -rf /var/lib/apt/lists/*
-
-# --------------------------
-# 4️⃣ Install Poetry
-# --------------------------
-RUN curl -sSL https://install.python-poetry.org | python3 -
-
-# --------------------------
-# 5️⃣ Set Work Directory
-# --------------------------
 WORKDIR /app
 
-# --------------------------
-# 6️⃣ Copy Project Files
-# --------------------------
+# System dependencies
+RUN apt-get update && apt-get install -y curl build-essential libpq-dev && rm -rf /var/lib/apt/lists/*
+
+# Install Poetry
+RUN curl -sSL https://install.python-poetry.org | python3 - && ln -s /root/.local/bin/poetry /usr/local/bin/poetry
+
+# Copy dependency files
 COPY pyproject.toml poetry.lock* ./
 
-# --------------------------
-# 7️⃣ Install Python Dependencies
-# --------------------------
-RUN poetry install --no-interaction --no-ansi
+# Install dependencies
+RUN poetry install --no-root --only main
 
-# --------------------------
-# 8️⃣ Copy Remaining Files
-# --------------------------
+# Copy project
 COPY . .
 
-# --------------------------
-# 9️⃣ Expose Port
-# --------------------------
-EXPOSE 8000
+# Entrypoint
+COPY entrypoint.prod.sh /entrypoint.prod.sh
+RUN chmod +x /entrypoint.prod.sh
 
-# --------------------------
-# 🔟 Start Django
-# --------------------------
-CMD ["poetry", "run", "python", "-m", "core.manage", "runserver", "0.0.0.0:8000"]
+EXPOSE 8080
+
+ENTRYPOINT ["/entrypoint.prod.sh"]
+
+
+# Default command to run Django
+# CMD ["poetry", "run", "python", "-m", "core.manage", "runserver", "0.0.0.0:8000"]
 
