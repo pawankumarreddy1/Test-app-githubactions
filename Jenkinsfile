@@ -1,25 +1,14 @@
 pipeline {
-    agent any
-
-    options {
-        skipDefaultCheckout(true)   // avoid double checkout
-    }
-
-    environment {
-        PROJECT_ID = credentials('gcp-project-id')
-        GOOGLE_APPLICATION_CREDENTIALS = credentials('gcp-sa-key')
-        REGION = credentials('gcp-region')
+    agent {
+        docker {
+            image 'google/cloud-sdk:slim'
+        }
     }
 
     stages {
-
         stage('Checkout Code') {
             steps {
-                checkout([
-                    $class: 'GitSCM',
-                    branches: [[name: '*/main']],
-                    userRemoteConfigs: [[url: 'https://github.com/pawankumarreddy1/Test-app-githubactions.git']]
-                ])
+                checkout scm
             }
         }
 
@@ -27,8 +16,8 @@ pipeline {
             steps {
                 sh '''
                 echo "Authenticating..."
+                gcloud --version
                 gcloud auth activate-service-account --key-file="$GOOGLE_APPLICATION_CREDENTIALS"
-
                 gcloud config set project "$PROJECT_ID"
                 gcloud config set run/region "$REGION"
                 '''
@@ -38,12 +27,12 @@ pipeline {
         stage('Build & Deploy') {
             steps {
                 sh '''
-                echo "Deploying to Cloud Run..."
+                echo "Deploying..."
                 gcloud run deploy test-app \
                     --image gcr.io/$PROJECT_ID/test-app:latest \
                     --platform managed \
-                    --allow-unauthenticated \
-                    --region "$REGION"
+                    --region "$REGION" \
+                    --allow-unauthenticated
                 '''
             }
         }
