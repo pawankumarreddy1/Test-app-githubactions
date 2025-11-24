@@ -1,70 +1,54 @@
 pipeline {
     agent any
 
+    options {
+        skipDefaultCheckout(true)   // avoid double checkout
+    }
+
     environment {
         PROJECT_ID = credentials('gcp-project-id')
-        REGION = credentials('gcp-region')
-        SERVICE_NAME = "django-backend"
-        IMAGE_NAME = "django-backend"
-        REPO = "asia-south1-docker.pkg.dev/${PROJECT_ID}/cloud-run-repo/${IMAGE_NAME}"
         GOOGLE_APPLICATION_CREDENTIALS = credentials('gcp-sa-key')
+        REGION = credentials('gcp-region')
     }
 
     stages {
+
         stage('Checkout Code') {
             steps {
-                checkout scm
+                checkout([
+                    $class: 'GitSCM',
+                    branches: [[name: '*/main']],
+                    userRemoteConfigs: [[url: 'https://github.com/pawankumarreddy1/Test-app-githubactions.git']]
+                ])
             }
         }
 
         stage('Setup GCloud') {
             steps {
-                sh """
-                echo '${GOOGLE_APPLICATION_CREDENTIALS}' > gcloud-key.json
+                sh '''
+                echo "Authenticating..."
+                gcloud auth activate-service-account --key-file="$GOOGLE_APPLICATION_CREDENTIALS"
 
-                gcloud auth activate-service-account --key-file=gcloud-key.json
-
-                gcloud config set project ${PROJECT_ID}
-                gcloud config set compute/region ${REGION}
-                gcloud auth configure-docker ${REGION}-docker.pkg.dev --quiet
-                """
+                gcloud config set project "$PROJECT_ID"
+                gcloud config set run/region "$REGION"
+                '''
             }
         }
 
-        stage('Docker Build') {
+        stage('Build & Deploy') {
             steps {
-                sh "docker build -t ${REPO}:latest ."
-            }
-        }
-
-        stage('Docker Push') {
-            steps {
-                sh "docker push ${REPO}:latest"
-            }
-        }
-
-        stage('Deploy to Cloud Run') {
-            steps {
-                sh """
-                gcloud run deploy ${SERVICE_NAME} \
-                    --image=${REPO}:latest \
-                    --region=${REGION} \
-                    --platform=managed \
+                sh '''
+                echo "Deploying to Cloud Run..."
+                gcloud run deploy test-app \
+                    --image gcr.io/$PROJECT_ID/test-app:latest \
+                    --platform managed \
                     --allow-unauthenticated \
-                    --port=8080
-                """
+                    --region "$REGION"
+                '''
             }
-        }
-    }
-
-    post {
-        failure {
-            echo "❌ Deployment Failed!"
-        }
-        success {
-            echo "✅ Deployment successful!"
         }
     }
 }
+
 
 
