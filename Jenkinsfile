@@ -23,37 +23,48 @@ pipeline {
             }
         }
 
-        stage('Setup GCloud') {
+        stage('Build Docker Image') {
+            steps {
+                sh '''
+                echo "Building Docker image..."
+                docker build -t test-app:latest .
+                '''
+            }
+        }
+
+        stage('Push Docker Image to GCR') {
             steps {
                 withCredentials([
                     file(credentialsId: 'gcp-sa-key', variable: 'GOOGLE_APPLICATION_CREDENTIALS'),
                     string(credentialsId: 'gcp-project-id', variable: 'PROJECT_ID'),
                     string(credentialsId: 'gcp-region', variable: 'REGION')
                 ]) {
+
                     sh '''
-                    echo "Authenticating..."
-                    gcloud --version
-
-                    # Authenticate using the service account file
+                    echo "Authenticating Docker to GCR..."
                     gcloud auth activate-service-account --key-file="$GOOGLE_APPLICATION_CREDENTIALS"
+                    gcloud auth configure-docker gcr.io --quiet
 
-                    # Configure project and region
-                    gcloud config set project "$PROJECT_ID"
-                    gcloud config set run/region "$REGION"
+                    echo "Tagging and pushing image..."
+                    docker tag test-app:latest gcr.io/$PROJECT_ID/test-app:latest
+                    docker push gcr.io/$PROJECT_ID/test-app:latest
                     '''
                 }
             }
         }
 
-        stage('Build & Deploy') {
+        stage('Deploy to Cloud Run') {
             steps {
                 withCredentials([
                     file(credentialsId: 'gcp-sa-key', variable: 'GOOGLE_APPLICATION_CREDENTIALS'),
                     string(credentialsId: 'gcp-project-id', variable: 'PROJECT_ID'),
                     string(credentialsId: 'gcp-region', variable: 'REGION')
                 ]) {
+
                     sh '''
                     echo "Deploying to Cloud Run..."
+
+                    gcloud auth activate-service-account --key-file="$GOOGLE_APPLICATION_CREDENTIALS"
 
                     gcloud run deploy test-app \
                         --image gcr.io/$PROJECT_ID/test-app:latest \
@@ -66,4 +77,5 @@ pipeline {
         }
     }
 }
+
 
