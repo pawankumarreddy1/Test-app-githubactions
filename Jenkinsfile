@@ -2,64 +2,68 @@ pipeline {
     agent any
 
     environment {
-        APP_NAME = "hostelapp-backend"
-        EC2_HOST = "3.94.166.124" 
-        EC2_USER = "ubuntu"
-        SSH_KEY = "aws-ec2-ssh" 
-        DOCKER_COMPOSE_FILE = "docker-compose.prod.yml"
-        BRANCH_NAME = "main"
+        PROJECT_ID = "your-gcp-project-id"
+        REGION = "asia-south1"
+        SERVICE = "frontend-cloudrun-service"
+        REPO = "frontend-repo"
+        IMAGE = "${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/frontend:${BUILD_NUMBER}"
     }
 
     stages {
-        stage('Checkout Code') {
+        stage('Checkout') {
             steps {
-                git branch: "${BRANCH_NAME}", url: 'https://github.com/Prajwal-Fintech/hostelapp-backend.git'
+                checkout scm
             }
         }
 
-        stage('Build Docker Image') {
+        stage('Install Node') {
             steps {
-                sh 'docker build -t ${APP_NAME}:latest -f Dockerfile .'
+                sh 'node --version || true'
+                sh 'npm --version || true'
             }
         }
 
-        stage('Run Tests') {
+        stage('Install Dependencies & Build') {
             steps {
-                sh 'echo "Running Django tests..."'
-                sh 'docker run --rm ${APP_NAME}:latest poetry run pytest || true'
+                sh 'npm install'
+                sh 'npm run build'
             }
         }
 
-        stage('Deploy to EC2') {
+        stage('Docker Build') {
             steps {
-                sshagent(credentials: ["${SSH_KEY}"]) {
-                    sh """
-                    ssh -o StrictHostKeyChecking=no ${EC2_USER}@${EC2_HOST} << 'EOF'
-                    set -e
-                    echo "Pulling latest code..."
-                    cd ~/hostelapp-backend || git clone https://github.com/your-org/hostelapp-backend.git ~/hostelapp-backend
-                    cd ~/hostelapp-backend
-                    git pull origin ${BRANCH_NAME}
+                sh "docker build -t $IMAGE ."
+            }
+        }
 
-                    echo "Building and restarting containers..."
-                    docker compose -f ${DOCKER_COMPOSE_FILE} down
-                    docker compose -f ${DOCKER_COMPOSE_FILE} up -d --build
+        stage('Authenticate & Push Image') {
+            steps {
+                withCredentials([file(credentialsId: 'gcp-sa-key', variable: 'GCP_KEY')]) {
+                    sh '''
+                        gcloud auth activate-service-account --key-file=$GCP_KEY
+                        gcloud auth configure-docker ${REGION}-docker.pkg.dev --quiet
+                    '''
+                }
+                sh "docker push $IMAGE"
+            }
+        }
 
-                    echo "Cleaning up old images..."
-                    docker image prune -f
-                    EOF
-                    """
+        stage('Deploy to Cloud Run') {
+            steps {
+                withCredentials([file(credentialsId: 'gcp-sa-key', variable: 'GCP_KEY')]) {
+                    sh '''
+                        gcloud auth activate-service-account --key-file=$GCP_KEY
+                        gcloud config set project $PROJECT_ID
+                        gcloud run deploy $SERVICE \
+                          --image=$IMAGE \
+                          --platform=managed \
+                          --region=$REGION \
+                          --allow-unauthenticated \
+                          --port=8080
+                    '''
                 }
             }
         }
     }
-
-    post {
-        success {
-            echo "✅ Deployment successful!"
-        }
-        failure {
-            echo "❌ Deployment failed!"
-        }
-    }
 }
+
