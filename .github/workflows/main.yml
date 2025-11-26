@@ -1,4 +1,4 @@
-name: 🚀 Deploy to Cloud Run ()
+name: 🚀 Deploy to Cloud Run (production)
 
 on:
   push:
